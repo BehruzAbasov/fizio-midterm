@@ -3,7 +3,7 @@ const DATA=window.EXAM_QUESTIONS||[],study=document.body.dataset.mode==='study',
 let s;try{s=JSON.parse(localStorage.getItem(key))||{}}catch{s={}}
 s.answers??={};s.checked??={};s.errors??={};s.status??={};s.number??=1;s.shuffle??=false;s.auto??=false;s.filter??='all';s.search??='';s.studyShuffle??=false;s.show??=false;
 let n=s.number,practice=false,wrongNums=[],pa={},pc={};
-const save=()=>{s.number=n;localStorage.setItem(key,JSON.stringify(s))},ans=()=>practice?pa:s.answers,checked=()=>practice?pc:s.checked;
+const save=()=>{s.number=n;localStorage.setItem(key,JSON.stringify(s));window.fizioCloud?.save?.(s)},ans=()=>practice?pa:s.answers,checked=()=>practice?pc:s.checked;
 const shuffled=(a,seed)=>{let x=[...a];for(let i=x.length-1;i>0;i--){seed=(Math.imul(seed,1664525)+1013904223)>>>0;const j=seed%(i+1);[x[i],x[j]]=[x[j],x[i]]}return x};
 function subset(){if(practice)return wrongNums.map(i=>byNum.get(i));let a=DATA;if(study){a=a.filter(q=>(s.filter==='all'||(s.filter==='new'?!s.status[q.number]:s.status[q.number]===s.filter))&&(!s.search||[q.question,...q.options.map(o=>o.text)].join(' ').toLocaleLowerCase('az').includes(s.search.toLocaleLowerCase('az'))));if(s.studyShuffle)a=shuffled(a,8801)}return a}
 function go(target,force=false){if(!byNum.has(target))return;if(study&&force){s.filter='all';s.search='';s.studyShuffle=false;$('filter').value='all';$('search').value='';$('studyShuffle').checked=false}if(practice&&!wrongNums.includes(target))practice=false;n=target;s.show=false;save();render()}
@@ -34,5 +34,6 @@ $('auto').onchange=e=>{s.auto=e.target.checked;save();render()};
 $('finish').onclick=()=>{for(const i of Object.keys(ans()))checked()[i]=true;save();render();$('stats').scrollIntoView({behavior:'smooth'});alert('Nəticə yuxarıda göstərilir. Cavabsız suallar səhv sayılmır.')};
 $('repeatWrong').onclick=()=>{const numbers=DATA.filter(q=>s.errors[q.number]||(s.checked[q.number]&&s.answers[q.number]!==q.answer)).map(q=>q.number);if(!numbers.length){alert('Hələ səhv sual yoxdur.');return}practice=true;wrongNums=numbers;pa={};pc={};n=numbers[0];render()};
 $('reset').onclick=()=>{if(confirm('İmtahan cavabları sıfırlansın? Səhv tarixçəsi saxlanacaq.')){s.answers={};s.checked={};practice=false;n=1;save();render()}}}
+window.fizioCloudApply=(payload)=>{if(payload&&typeof payload==='object'){s={...s,...payload};n=byNum.has(s.number)?s.number:1;practice=false;localStorage.setItem(key,JSON.stringify(s));if(study){$('filter').value=s.filter||'all';$('search').value=s.search||'';$('studyShuffle').checked=!!s.studyShuffle}else{$('shuffle').checked=!!s.shuffle;$('auto').checked=!!s.auto}render()}};
 if(!byNum.has(n))n=1;render();
 })();
