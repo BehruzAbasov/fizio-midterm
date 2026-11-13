@@ -67,13 +67,15 @@ const letters='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const randomOrder=a=>{const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]]}return b};
 const numbers=new Map(DATA.map(q=>[q.number,q]));
 let state;
-function fresh(){return {order:randomOrder(DATA.map(q=>q.number)),options:Object.fromEntries(DATA.map(q=>[q.number,randomOrder(q.options.map(o=>o.id))])),answers:{},position:0,finished:false,repeat:false,wrongOrder:[],reviewAll:false}}
+function fresh(){return {order:randomOrder(DATA.map(q=>q.number)),options:Object.fromEntries(DATA.map(q=>[q.number,randomOrder(q.options.map(o=>o.id))])),answers:{},checked:{},position:0,finished:false,repeat:false,wrongOrder:[],reviewAll:false}}
 function valid(x){return x&&Array.isArray(x.order)&&x.order.length===DATA.length&&new Set(x.order).size===DATA.length&&x.order.every(n=>numbers.has(n))&&x.options&&typeof x.options==='object'&&x.answers&&typeof x.answers==='object'}
 try{state=JSON.parse(localStorage.getItem(KEY))}catch{}
 if(!valid(state))state=fresh();
+state.checked??={};
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch{}}
 const activeOrder=()=>state.repeat?state.wrongOrder:state.order;
 const activeAnswers=()=>state.repeat?(state.repeatAnswers??={}):state.answers;
+const activeChecked=()=>state.repeat?(state.repeatChecked??={}):state.checked;
 const current=()=>numbers.get(activeOrder()[state.position]);
 const score=(order,answers)=>{let correct=0,wrong=0,blank=0;for(const num of order){if(!answers[num])blank++;else if(answers[num]===numbers.get(num).answer)correct++;else wrong++}return{correct,wrong,blank}};
 const label=(q,id)=>letters[state.options[q.number].indexOf(id)]||id;
@@ -102,20 +104,21 @@ for(const [i,id] of state.options[q.number].entries()){
 const option=q.options.find(o=>o.id===id);if(!option)continue;
 const btn=document.createElement('button');btn.type='button';btn.className='option';
 if(answers[q.number]===id)btn.classList.add('selected');
-if(state.repeatFinished){if(id===q.answer)btn.classList.add('good');else if(id===answers[q.number])btn.classList.add('bad')}
-btn.disabled=!!state.repeatFinished;
+if(state.repeatFinished||activeChecked()[q.number]){if(id===q.answer)btn.classList.add('good');else if(id===answers[q.number])btn.classList.add('bad')}
+btn.disabled=!!state.repeatFinished||!!activeChecked()[q.number];
 const letter=document.createElement('b');letter.textContent=letters[i]+')';
 const txt=document.createElement('span');txt.textContent=option.text;btn.append(letter,txt);
-btn.onclick=()=>{answers[q.number]=id;save();render()};card.append(btn);
+btn.onclick=()=>{if(activeChecked()[q.number])return;answers[q.number]=id;save();render()};card.append(btn);
 }
 const controls=document.createElement('div');controls.className='mix-controls';
 function button(text,fn,cls){const b=document.createElement('button');b.textContent=text;b.className=cls||'';b.onclick=fn;controls.append(b)}
 button('← Əvvəlki',()=>go(state.position-1),'secondary');
+if(!activeChecked()[q.number]&&!state.repeatFinished)button('Bu sualı yoxla',()=>{if(!answers[q.number]){alert('Əvvəlcə cavab variantı seç.');return}activeChecked()[q.number]=true;save();render()});
 button('Növbəti →',()=>go(state.position+1),'secondary');
-if(state.repeat)button(state.repeatFinished?'Təkrarı yenidən başla':'Təkrarı bitir',()=>{if(state.repeatFinished){state.repeatAnswers={};state.repeatFinished=false;state.position=0}else{state.repeatFinished=true}save();render()},'secondary');
+if(state.repeat)button(state.repeatFinished?'Təkrarı yenidən başla':'Təkrarı bitir',()=>{if(state.repeatFinished){state.repeatAnswers={};state.repeatChecked={};state.repeatFinished=false;state.position=0}else{state.repeatFinished=true}save();render()},'secondary');
 if(state.repeat)button('Əsas nəticəyə qayıt',()=>{state.repeat=false;state.repeatFinished=false;state.position=0;save();render()},'secondary');
 card.append(controls);
-if(state.repeatFinished){const note=document.createElement('p');note.className='mix-note';note.textContent='Düzgün cavab yaşıl, seçdiyin səhv cavab qırmızı ilə göstərilir.';card.append(note)}
+if(state.repeatFinished||activeChecked()[q.number]){const note=document.createElement('p');note.className='mix-note';note.textContent=answers[q.number]===q.answer?'✓ Düzgün cavab!':'✗ Səhv cavab. Düzgün variant yaşıl rəngdə göstərilir.';note.style.fontWeight='700';note.style.color=answers[q.number]===q.answer?'#126b32':'#a63131';card.append(note)}
 renderGrid();
 }
 function renderGrid(){const grid=$('numbers');grid.replaceChildren();activeOrder().forEach((num,i)=>{const b=document.createElement('button');b.textContent=i+1;b.title='Orijinal sual № '+num;b.className=(i===state.position&&!state.finished?'current ':'')+(activeAnswers()[num]?'answered':'');if(state.repeatFinished&&activeAnswers()[num])b.className+=activeAnswers()[num]===numbers.get(num).answer?' correct':' wrong';b.onclick=()=>{if(state.finished&&!state.repeat){const q=numbers.get(num);showReview(q)}else go(i)};grid.append(b)})}
@@ -126,7 +129,7 @@ const summary=document.createElement('p');summary.textContent='Cəmi '+DATA.leng
 const bar=document.createElement('div');bar.className='mix-result-toolbar';
 function button(text,fn,cls){const b=document.createElement('button');b.textContent=text;b.className=cls||'';b.onclick=fn;bar.append(b)}
 const wrong=state.order.filter(num=>state.answers[num]!==numbers.get(num).answer);
-button('Səhvləri yenidən işlə ('+wrong.length+')',()=>{if(!wrong.length){alert('Təkrarlanacaq səhv yoxdur.');return}state.repeat=true;state.wrongOrder=wrong;state.repeatAnswers={};state.repeatFinished=false;state.position=0;save();render()},'');
+button('Səhvləri yenidən işlə ('+wrong.length+')',()=>{if(!wrong.length){alert('Təkrarlanacaq səhv yoxdur.');return}state.repeat=true;state.wrongOrder=wrong;state.repeatAnswers={};state.repeatChecked={};state.repeatFinished=false;state.position=0;save();render()},'');
 button(state.reviewAll?'Yalnız səhvləri göstər':'Bütün cavabları göstər',()=>{state.reviewAll=!state.reviewAll;save();render()},'secondary');
 button('Yeni MIX başlat',startFresh,'secondary');r.append(bar);
 const note=document.createElement('p');note.className='mix-note';note.textContent='Cavabsız suallar da təkrar siyahısına daxil edilir. Sualı seçərək öz cavabını və düzgün variantı görə bilərsən.';r.append(note);
